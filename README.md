@@ -54,7 +54,7 @@ pip install -r requirements.txt
 2. Run the script:
 
 ```bash
-python osint_finder.py
+python ethos.py
 ```
 **Choose an option from the menu**:
   1) Find accounts by EMAIL 📧
