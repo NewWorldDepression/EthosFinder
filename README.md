@@ -1,40 +1,44 @@
 # EthosFinder
 # TRACE REVEAL CONNECT
 
-
-OSINT Finder is a **console-based tool** designed for exploring public digital footprints in a responsible way.  
-It provides a simple interactive menu and can check for public accounts or mentions based on:
-
-- 📧 Email address  
-- 📱 Phone number (with carrier & country detection)  
-- 👤 Username / handle  
-
-⚠️ **Important**: This tool uses only publicly available data (basic HTTP checks & web searches).  
-It is intended for **research, education, and lawful use cases only**. Please respect privacy and legal frameworks.
+EthosFinder is a modular OSINT tool designed to help researchers, cybersecurity enthusiasts, and investigators gather publicly available information about emails, phone numbers, social media handles, and more. **Use responsibly and only for lawful purposes.**
 
 ---
 
-## ✨ Features
+## Features
 
-- Interactive menu  
-- 📧 Email lookup → quick web search for mentions  
-- 📱 Phone number lookup → detect country & carrier (via [`phonenumbers`](https://pypi.org/project/phonenumbers/))  
-- 👤 Handle lookup → check common platforms (Instagram, Twitter/X, GitHub, Reddit, TikTok, LinkedIn, YouTube, etc.)  
-- 💾 Export results to JSON
+### 1. Modular Search Tools
+- **Email Search** (`email_search.py`)
+  - Basic web search (Google, DuckDuckGo, Bing, Yandex)
+  - Detect potential social profiles associated with emails
+  - Optionally enrich results using RapidAPI services
+  - Save search results interactively
 
-## 🛣️ Upcoming features
+- **Phone Number Search** (`phone_search.py`)
+  - Parses phone numbers with `phonenumbers`
+  - Detects E.164 format, country, and carrier
+  - Suggests possible public profiles (e.g., WhatsApp click-to-chat)
+  - Optionally query RapidAPI for enhanced data
+  - Save search results interactively
 
-Planned additions to the tool (future releases):
+- **Handle / Pseudonym Search** (`handle_search.py`)
+  - Checks common social media platforms (Instagram, Twitter, TikTok, GitHub, LinkedIn, YouTube, Discord, Reddit, etc.)
+  - Optionally query RapidAPI for enhanced results
+  - Save search results interactively
 
-- 🔎 **Person search by full name** — allow searching using given name and family name to locate public profiles and mentions.  
-- 📅 **Date of birth (when known)** — accept a birth date as an optional filter to narrow down matches.  
-- 💼 **Occupation / job title (when known)** — use known occupation or company information to improve relevance of results.  
-- 🗂️ **Multi-attribute matching** — combine name, date of birth, occupation and other public facts to better identify and filter digital footprints across sources.  
-- ⚖️ **Privacy & compliance controls** — clearer consent checks, rate-limiting, and logging to ensure lawful usage.  
+### 2. Settings
+- Configure RapidAPI key(s) and API hosts via **settings menu**
+- Reset all settings with a single click
 
-These features will focus on searching public sources and improving match quality while keeping privacy and legality in mind.
+### 3. Future Features
+Planned for future versions:
+- Search by full name (first + last) to detect social profiles
+- Search by public IP to detect location and ISP
+- WHOIS lookup for domain information
+- Additional OSINT modules for social media, public records, and more
 
 ---
+
 
 ## 📦 Requirements
 
@@ -59,9 +63,9 @@ python ethos.py
 **Choose an option from the menu**:
   1) Find accounts by EMAIL 📧
   2) Find accounts by PHONE NUMBER 📱
-  3) Find accounts by PSEUDONYM / HANDLE 👤
+  3) Find accounts by USERNAME 👤
   4) Exit
 
 Enter the data when prompted.
 
-View results directly in the console or save them to a JSON file.
+View results directly in the console.
