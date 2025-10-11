@@ -1,2 +1,6 @@
-phonenumbers
-requests
+phonenumbers>=8.13.0
+requests>=2.31.0
+cryptography>=41.0.0
+
+# Build tools (for creating executable)
+pyinstaller>=6.0.0

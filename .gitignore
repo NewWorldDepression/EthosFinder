@@ -1,0 +1,38 @@
+# Sensitive configuration files - DO NOT COMMIT
+config.json
+.ethos_key
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+build_env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# PyInstaller build artifacts
+*.spec
+!EthosFinder.spec

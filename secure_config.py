@@ -1,0 +1,205 @@
+# secure_config.py
+"""
+Secure configuration management with environment variable support
+and optional encryption for sensitive data.
+"""
+
+import json
+import os
+from typing import Dict, Optional
+from base64 import b64encode, b64decode
+
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    print("[!] cryptography library not installed. API keys will be stored in plaintext.")
+    print("[i] Install with: pip install cryptography")
+
+CONFIG_FILE = "config.json"
+KEY_FILE = ".ethos_key"
+
+class SecureConfig:
+    """Manages configuration with secure API key storage."""
+
+    def __init__(self):
+        self.config = {
+            "rapidapi_key": "",
+            "rapidapi_hosts": {}
+        }
+        self.cipher = None
+
+    def _get_or_create_key(self) -> Optional[bytes]:
+        """Get or create encryption key."""
+        if not CRYPTO_AVAILABLE:
+            return None
+
+        if os.path.exists(KEY_FILE):
+            with open(KEY_FILE, "rb") as f:
+                return f.read()
+        else:
+            # Generate new key
+            key = Fernet.generate_key()
+            with open(KEY_FILE, "wb") as f:
+                f.write(key)
+            # Hide the key file on Windows
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    FILE_ATTRIBUTE_HIDDEN = 0x02
+                    ctypes.windll.kernel32.SetFileAttributesW(KEY_FILE, FILE_ATTRIBUTE_HIDDEN)
+                except:
+                    pass
+            print(f"[+] Encryption key created at {KEY_FILE}")
+            return key
+
+    def _encrypt(self, data: str) -> str:
+        """Encrypt sensitive data."""
+        if not CRYPTO_AVAILABLE or not data:
+            return data
+
+        try:
+            if not self.cipher:
+                key = self._get_or_create_key()
+                if key:
+                    self.cipher = Fernet(key)
+
+            if self.cipher:
+                encrypted = self.cipher.encrypt(data.encode())
+                return b64encode(encrypted).decode()
+            return data
+        except Exception as e:
+            print(f"[!] Encryption failed: {e}")
+            return data
+
+    def _decrypt(self, data: str) -> str:
+        """Decrypt sensitive data."""
+        if not CRYPTO_AVAILABLE or not data:
+            return data
+
+        try:
+            if not self.cipher:
+                key = self._get_or_create_key()
+                if key:
+                    self.cipher = Fernet(key)
+
+            if self.cipher:
+                encrypted = b64decode(data.encode())
+                return self.cipher.decrypt(encrypted).decode()
+            return data
+        except Exception:
+            # If decryption fails, assume it's plaintext (backward compatibility)
+            return data
+
+    def load(self) -> Dict:
+        """Load configuration from file and environment variables."""
+        # First, try to load from environment variable
+        rapidapi_key_env = os.getenv("ETHOS_RAPIDAPI_KEY")
+        if rapidapi_key_env:
+            self.config["rapidapi_key"] = rapidapi_key_env
+            print("[+] RapidAPI key loaded from environment variable ETHOS_RAPIDAPI_KEY")
+
+        # Load config file if exists
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    loaded_config = json.load(f)
+
+                if not isinstance(loaded_config, dict):
+                    raise ValueError("Config file must contain a JSON object")
+
+                # Decrypt API key if it's encrypted
+                if loaded_config.get("rapidapi_key") and not rapidapi_key_env:
+                    loaded_config["rapidapi_key"] = self._decrypt(loaded_config["rapidapi_key"])
+
+                self.config.update(loaded_config)
+                print(f"[+] Configuration loaded from {CONFIG_FILE}")
+
+            except json.JSONDecodeError as e:
+                print(f"[!] Error parsing config file: {e}")
+                print("[i] Using default configuration.")
+            except Exception as e:
+                print(f"[!] Error reading config file: {e}")
+                print("[i] Using default configuration.")
+        else:
+            print(f"[i] No config file found. Using defaults.")
+            print(f"[i] Tip: Set ETHOS_RAPIDAPI_KEY environment variable for secure key storage.")
+
+        return self.config
+
+    def save(self) -> bool:
+        """Save configuration to file with encrypted API key."""
+        try:
+            # Create a copy to encrypt sensitive data
+            save_data = self.config.copy()
+
+            # Don't save API key if it's from environment variable
+            if os.getenv("ETHOS_RAPIDAPI_KEY"):
+                save_data["rapidapi_key"] = ""
+            elif save_data.get("rapidapi_key"):
+                # Encrypt API key before saving
+                save_data["rapidapi_key"] = self._encrypt(save_data["rapidapi_key"])
+
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(save_data, f, indent=2)
+
+            print(f"[+] Configuration saved to {CONFIG_FILE}")
+            if CRYPTO_AVAILABLE and save_data.get("rapidapi_key"):
+                print("[+] API key encrypted and stored securely")
+            return True
+
+        except Exception as e:
+            print(f"[!] Error saving config: {e}")
+            return False
+
+    def set_api_key(self, api_name: str, host: str, key: str) -> bool:
+        """Set API key and host."""
+        if not key or not host:
+            print("[!] API key and host cannot be empty!")
+            return False
+
+        self.config["rapidapi_key"] = key
+        self.config["rapidapi_hosts"][api_name] = host
+
+        return self.save()
+
+    def remove_api_key(self, api_name: str) -> bool:
+        """Remove API configuration."""
+        if api_name in self.config["rapidapi_hosts"]:
+            del self.config["rapidapi_hosts"][api_name]
+            print(f"[+] API configuration for {api_name} removed")
+            return self.save()
+        else:
+            print(f"[!] No configuration found for {api_name}")
+            return False
+
+    def list_apis(self):
+        """List configured APIs."""
+        if not self.config["rapidapi_hosts"]:
+            print("[i] No APIs configured yet.")
+            return
+
+        print("\n=== Configured APIs ===")
+        for api_name, host in self.config["rapidapi_hosts"].items():
+            print(f"  - {api_name}: {host}")
+
+        has_key = bool(self.config.get("rapidapi_key") or os.getenv("ETHOS_RAPIDAPI_KEY"))
+        print(f"\nAPI Key Status: {'CONFIGURED' if has_key else 'NOT CONFIGURED'}")
+        if os.getenv("ETHOS_RAPIDAPI_KEY"):
+            print("(Key loaded from environment variable)")
+        print()
+
+# Global instance for backward compatibility
+secure_config = SecureConfig()
+config = secure_config.config
+
+def load_config():
+    """Load configuration (backward compatible interface)."""
+    return secure_config.load()
+
+def save_config():
+    """Save configuration (backward compatible interface)."""
+    return secure_config.save()
