@@ -29,7 +29,8 @@ class SecureConfig:
         self.config = {
             "rapidapi_key": "",
             "rapidapi_hosts": {},
-            "dnsdumpster_api_key": ""
+            "dnsdumpster_api_key": "",
+            "shodan_api_key": ""
         }
         self.cipher = None
 
@@ -108,6 +109,12 @@ class SecureConfig:
         if dnsdumpster_key_env:
             self.config["dnsdumpster_api_key"] = dnsdumpster_key_env
             print("[+] DNSDumpster API key loaded from environment variable ETHOS_DNSDUMPSTER_KEY")
+        
+        # Check for Shodan key in environment
+        shodan_key_env = os.getenv("ETHOS_SHODAN_KEY")
+        if shodan_key_env:
+            self.config["shodan_api_key"] = shodan_key_env
+            print("[+] Shodan API key loaded from environment variable ETHOS_SHODAN_KEY")
 
         # Load config file if exists
         if os.path.exists(CONFIG_FILE):
@@ -124,6 +131,9 @@ class SecureConfig:
                 
                 if loaded_config.get("dnsdumpster_api_key") and not dnsdumpster_key_env:
                     loaded_config["dnsdumpster_api_key"] = self._decrypt(loaded_config["dnsdumpster_api_key"])
+                
+                if loaded_config.get("shodan_api_key") and not shodan_key_env:
+                    loaded_config["shodan_api_key"] = self._decrypt(loaded_config["shodan_api_key"])
 
                 self.config.update(loaded_config)
                 print(f"[+] Configuration loaded from {CONFIG_FILE}")
@@ -139,6 +149,7 @@ class SecureConfig:
             print(f"[i] Tip: Set environment variables for secure key storage:")
             print(f"[i]   - ETHOS_RAPIDAPI_KEY for RapidAPI")
             print(f"[i]   - ETHOS_DNSDUMPSTER_KEY for DNSDumpster")
+            print(f"[i]   - ETHOS_SHODAN_KEY for Shodan")
 
         return self.config
 
@@ -160,6 +171,12 @@ class SecureConfig:
             elif save_data.get("dnsdumpster_api_key"):
                 # Encrypt DNSDumpster key before saving
                 save_data["dnsdumpster_api_key"] = self._encrypt(save_data["dnsdumpster_api_key"])
+            
+            if os.getenv("ETHOS_SHODAN_KEY"):
+                save_data["shodan_api_key"] = ""
+            elif save_data.get("shodan_api_key"):
+                # Encrypt Shodan key before saving
+                save_data["shodan_api_key"] = self._encrypt(save_data["shodan_api_key"])
 
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(save_data, f, indent=2)
@@ -171,6 +188,8 @@ class SecureConfig:
                     encrypted_items.append("RapidAPI key")
                 if save_data.get("dnsdumpster_api_key"):
                     encrypted_items.append("DNSDumpster key")
+                if save_data.get("shodan_api_key"):
+                    encrypted_items.append("Shodan key")
                 if encrypted_items:
                     print(f"[+] {', '.join(encrypted_items)} encrypted and stored securely")
             return True
@@ -202,6 +221,19 @@ class SecureConfig:
     def get_dnsdumpster_key(self) -> Optional[str]:
         """Get DNSDumpster API key."""
         return self.config.get("dnsdumpster_api_key", "")
+    
+    def set_shodan_key(self, key: str) -> bool:
+        """Set Shodan API key."""
+        if not key:
+            print("[!] API key cannot be empty!")
+            return False
+        
+        self.config["shodan_api_key"] = key
+        return self.save()
+    
+    def get_shodan_key(self) -> Optional[str]:
+        """Get Shodan API key."""
+        return self.config.get("shodan_api_key", "")
 
     def remove_api_key(self, api_name: str) -> bool:
         """Remove RapidAPI configuration."""
@@ -221,6 +253,16 @@ class SecureConfig:
             return self.save()
         else:
             print(f"[!] No DNSDumpster API key found")
+            return False
+    
+    def remove_shodan_key(self) -> bool:
+        """Remove Shodan API key."""
+        if "shodan_api_key" in self.config and self.config["shodan_api_key"]:
+            self.config["shodan_api_key"] = ""
+            print(f"[+] Shodan API key removed")
+            return self.save()
+        else:
+            print(f"[!] No Shodan API key found")
             return False
 
     def list_apis(self):
@@ -247,6 +289,12 @@ class SecureConfig:
         has_dnsdumpster_key = bool(self.config.get("dnsdumpster_api_key") or os.getenv("ETHOS_DNSDUMPSTER_KEY"))
         print(f"\n[DNSDumpster Key]: {'CONFIGURED ✓' if has_dnsdumpster_key else 'NOT CONFIGURED ✗'}")
         if os.getenv("ETHOS_DNSDUMPSTER_KEY"):
+            print("  (Loaded from environment variable)")
+        
+        # Shodan status
+        has_shodan_key = bool(self.config.get("shodan_api_key") or os.getenv("ETHOS_SHODAN_KEY"))
+        print(f"\n[Shodan Key]: {'CONFIGURED ✓' if has_shodan_key else 'NOT CONFIGURED ✗'}")
+        if os.getenv("ETHOS_SHODAN_KEY"):
             print("  (Loaded from environment variable)")
         
         # Security status

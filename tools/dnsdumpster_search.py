@@ -125,21 +125,24 @@ def query_dnsdumpster_public(domain: str) -> Dict:
 # ---------------------------
 # Main DNSDumpster Search
 # ---------------------------
-def find_by_domain(domain: str) -> Dict:
+def find_by_domain(domain: str, use_shodan: bool = True) -> Dict:
     """
     Search for domain information using DNSDumpster.
+    Optionally enhances results with Shodan intelligence.
     
     Workflow:
     1. Validate domain format
     2. Check if API key is configured
     3. Query DNSDumpster API or use public lookup
-    4. Parse and return results
+    4. Optionally query Shodan for additional intelligence
+    5. Parse and return results
     
     Args:
         domain: Domain name to search
+        use_shodan: Whether to enhance with Shodan data (default: True)
     
     Returns:
-        Dictionary containing DNS information
+        Dictionary containing DNS information and optionally Shodan intelligence
     """
     results = {
         "domain": domain,
@@ -183,6 +186,33 @@ def find_by_domain(domain: str) -> Dict:
         public_results = query_dnsdumpster_public(domain)
         results.update(public_results)
         results["method"] = "public"
+    
+    # Enhance with Shodan intelligence if requested and IPs are available
+    if use_shodan and results.get("ip_addresses"):
+        try:
+            from tools import shodan_search
+            
+            # Check if Shodan API key is configured
+            shodan_key = shodan_search.get_shodan_api_key()
+            if shodan_key:
+                print("\n[*] Enhancing results with Shodan intelligence...")
+                shodan_intel = shodan_search.get_domain_intelligence(
+                    domain, 
+                    results["ip_addresses"]
+                )
+                
+                if "error" not in shodan_intel:
+                    results["shodan_intelligence"] = shodan_intel
+                    print("[+] Shodan intelligence added successfully")
+                else:
+                    print(f"[!] Shodan enhancement failed: {shodan_intel.get('error', 'Unknown error')}")
+            else:
+                print("[i] Shodan API key not configured - skipping Shodan enhancement")
+                print("[i] Configure Shodan key in Settings for comprehensive intelligence")
+        except ImportError:
+            print("[!] Shodan module not available")
+        except Exception as e:
+            print(f"[!] Error enhancing with Shodan: {e}")
     
     return results
 

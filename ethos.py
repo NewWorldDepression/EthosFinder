@@ -58,8 +58,11 @@ def menu_settings():
     print("3) 📋 LIST Configured APIs")
     print("4) 🔐 ADD DNSDumpster API Key")
     print("5) 🗑️  REMOVE DNSDumpster API Key")
-    print("6) 📊 VIEW All Configuration")
-    print("7) ⬅️  BACK to Main Menu")
+    print("6) 🌐 ADD Shodan API Key")
+    print("7) 🗑️  REMOVE Shodan API Key")
+    print("8) 📊 VIEW All Configuration")
+    print("9) 💳 CHECK Shodan API Credits")
+    print("10) ⬅️  BACK to Main Menu")
     print("="*60)
     choice = input("Choice: ").strip()
 
@@ -147,6 +150,61 @@ def menu_settings():
                     print("[i] No DNSDumpster API key found.")
 
     elif choice == "6":
+        # Add Shodan API key
+        print("\n" + "-"*60)
+        print("Shodan API Configuration")
+        print("-"*60)
+        print("[i] Get your API key from: https://account.shodan.io/")
+        print("[i] Free tier: 100 query credits per month")
+        print()
+        
+        api_key = input("Enter Shodan API key: ").strip()
+        if not api_key:
+            print("[!] No key provided!")
+            return
+        
+        if SECURE_MODE and secure_config:
+            # Store encrypted
+            secure_config.config["shodan_api_key"] = api_key
+            if secure_config.save():
+                print("[+] Shodan API key saved securely!")
+                
+                # Test the key
+                print("\n[*] Testing API key...")
+                from tools import shodan_search
+                api_info = shodan_search.shodan_api_info(api_key)
+                if "error" not in api_info:
+                    print(f"[+] API key valid!")
+                    print(f"    Plan: {api_info.get('plan', 'unknown')}")
+                    print(f"    Query credits: {api_info.get('query_credits', 0)}")
+                else:
+                    print(f"[!] API key test failed: {api_info['error']}")
+        else:
+            # Store in regular config
+            from config import config, save_config
+            config["shodan_api_key"] = api_key
+            if save_config():
+                print("[+] Shodan API key saved!")
+    
+    elif choice == "7":
+        # Remove Shodan API key
+        confirm = input("Remove Shodan API key? (y/N): ").strip().lower()
+        if confirm == "y":
+            if SECURE_MODE and secure_config:
+                if secure_config.remove_shodan_key():
+                    print("[+] Shodan API key removed!")
+                else:
+                    print("[i] No Shodan API key found.")
+            else:
+                from config import config, save_config
+                if "shodan_api_key" in config:
+                    del config["shodan_api_key"]
+                    save_config()
+                    print("[+] Shodan API key removed!")
+                else:
+                    print("[i] No Shodan API key found.")
+
+    elif choice == "8":
         # View all configuration
         print("\n" + "="*60)
         print("           CURRENT CONFIGURATION")
@@ -154,24 +212,59 @@ def menu_settings():
         
         if SECURE_MODE and secure_config:
             print(f"\n[Security Mode]: ENABLED (Encrypted)")
-            print(f"[RapidAPI Key]:  {'CONFIGURED ✓' if secure_config.config.get('rapidapi_key') else 'NOT SET ✗'}")
+            print(f"[RapidAPI Key]:    {'CONFIGURED ✓' if secure_config.config.get('rapidapi_key') else 'NOT SET ✗'}")
             print(f"[DNSDumpster Key]: {'CONFIGURED ✓' if secure_config.config.get('dnsdumpster_api_key') else 'NOT SET ✗'}")
+            print(f"[Shodan Key]:      {'CONFIGURED ✓' if secure_config.config.get('shodan_api_key') else 'NOT SET ✗'}")
             
             if secure_config.config.get("rapidapi_hosts"):
                 print(f"\n[RapidAPI Hosts]:")
                 for name, host in secure_config.config["rapidapi_hosts"].items():
                     print(f"  • {name}: {host}")
             
-            env_key = os.getenv("ETHOS_RAPIDAPI_KEY")
-            if env_key:
-                print(f"\n[Environment Variable]: ETHOS_RAPIDAPI_KEY is set ✓")
+            # Check environment variables
+            env_vars = []
+            if os.getenv("ETHOS_RAPIDAPI_KEY"):
+                env_vars.append("ETHOS_RAPIDAPI_KEY")
+            if os.getenv("ETHOS_DNSDUMPSTER_KEY"):
+                env_vars.append("ETHOS_DNSDUMPSTER_KEY")
+            if os.getenv("ETHOS_SHODAN_KEY"):
+                env_vars.append("ETHOS_SHODAN_KEY")
+            
+            if env_vars:
+                print(f"\n[Environment Variables]: {', '.join(env_vars)} ✓")
         else:
             print(f"\n[Security Mode]: DISABLED (Plaintext)")
             print("[!] Install cryptography for secure storage: pip install cryptography")
         
         print("="*60 + "\n")
 
-    elif choice == "7":
+    elif choice == "9":
+        # Check Shodan API credits
+        print("\n" + "-"*60)
+        print("Shodan API Credits")
+        print("-"*60)
+        
+        from tools import shodan_search
+        api_info = shodan_search.shodan_api_info()
+        
+        if "error" not in api_info:
+            print(f"\n[+] Account Information:")
+            print(f"    Plan:           {api_info.get('plan', 'unknown')}")
+            print(f"    Query Credits:  {api_info.get('query_credits', 0)}")
+            print(f"    Scan Credits:   {api_info.get('scan_credits', 0)}")
+            print(f"    Monitored IPs:  {api_info.get('monitored_ips', 0)}")
+            
+            if api_info.get('unlocked'):
+                print(f"    Unlocked:       Yes ({api_info.get('unlocked_left', 0)} left)")
+            else:
+                print(f"    Unlocked:       No")
+        else:
+            print(f"[!] Error: {api_info['error']}")
+            print("[i] Make sure your Shodan API key is configured")
+        
+        print("-"*60 + "\n")
+
+    elif choice == "10":
         # Back to main menu
         return
 
@@ -327,9 +420,10 @@ def run():
             elif choice == "4":
                 # DNSDumpster domain search
                 print("\n" + "-"*60)
-                print("DOMAIN RECONNAISSANCE (DNSDumpster)")
+                print("DOMAIN RECONNAISSANCE (DNSDumpster + Shodan)")
                 print("-"*60)
                 print("[i] Search for DNS records, subdomains, and infrastructure")
+                print("[i] Shodan will enhance results if API key is configured")
                 print()
                 
                 domain = input("Enter domain (e.g., example.com): ").strip()
@@ -346,7 +440,7 @@ def run():
                 
                 try:
                     print("\n[*] Starting domain reconnaissance...")
-                    res = dnsdumpster_search.find_by_domain(domain)
+                    res = dnsdumpster_search.find_by_domain(domain, use_shodan=True)
                     
                     print("\n" + "="*60)
                     print("RESULTS:")
@@ -356,7 +450,7 @@ def run():
                     print("="*60)
                     
                     # Optional: Subdomain enumeration
-                    if res.get("method") == "public":
+                    if res.get("method") == "public" and not res.get("shodan_intelligence"):
                         enumerate = input("\nWould you like to enumerate subdomains? (y/N): ").strip().lower()
                         if enumerate == "y":
                             print("\n[*] Enumerating subdomains...")
