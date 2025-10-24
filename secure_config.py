@@ -28,7 +28,8 @@ class SecureConfig:
     def __init__(self):
         self.config = {
             "rapidapi_key": "",
-            "rapidapi_hosts": {}
+            "rapidapi_hosts": {},
+            "dnsdumpster_api_key": ""
         }
         self.cipher = None
 
@@ -96,11 +97,17 @@ class SecureConfig:
 
     def load(self) -> Dict:
         """Load configuration from file and environment variables."""
-        # First, try to load from environment variable
+        # First, try to load from environment variable (RapidAPI)
         rapidapi_key_env = os.getenv("ETHOS_RAPIDAPI_KEY")
         if rapidapi_key_env:
             self.config["rapidapi_key"] = rapidapi_key_env
             print("[+] RapidAPI key loaded from environment variable ETHOS_RAPIDAPI_KEY")
+        
+        # Also check for DNSDumpster key in environment
+        dnsdumpster_key_env = os.getenv("ETHOS_DNSDUMPSTER_KEY")
+        if dnsdumpster_key_env:
+            self.config["dnsdumpster_api_key"] = dnsdumpster_key_env
+            print("[+] DNSDumpster API key loaded from environment variable ETHOS_DNSDUMPSTER_KEY")
 
         # Load config file if exists
         if os.path.exists(CONFIG_FILE):
@@ -111,9 +118,12 @@ class SecureConfig:
                 if not isinstance(loaded_config, dict):
                     raise ValueError("Config file must contain a JSON object")
 
-                # Decrypt API key if it's encrypted
+                # Decrypt API keys if they're encrypted
                 if loaded_config.get("rapidapi_key") and not rapidapi_key_env:
                     loaded_config["rapidapi_key"] = self._decrypt(loaded_config["rapidapi_key"])
+                
+                if loaded_config.get("dnsdumpster_api_key") and not dnsdumpster_key_env:
+                    loaded_config["dnsdumpster_api_key"] = self._decrypt(loaded_config["dnsdumpster_api_key"])
 
                 self.config.update(loaded_config)
                 print(f"[+] Configuration loaded from {CONFIG_FILE}")
@@ -126,29 +136,43 @@ class SecureConfig:
                 print("[i] Using default configuration.")
         else:
             print(f"[i] No config file found. Using defaults.")
-            print(f"[i] Tip: Set ETHOS_RAPIDAPI_KEY environment variable for secure key storage.")
+            print(f"[i] Tip: Set environment variables for secure key storage:")
+            print(f"[i]   - ETHOS_RAPIDAPI_KEY for RapidAPI")
+            print(f"[i]   - ETHOS_DNSDUMPSTER_KEY for DNSDumpster")
 
         return self.config
 
     def save(self) -> bool:
-        """Save configuration to file with encrypted API key."""
+        """Save configuration to file with encrypted API keys."""
         try:
             # Create a copy to encrypt sensitive data
             save_data = self.config.copy()
 
-            # Don't save API key if it's from environment variable
+            # Don't save keys if they're from environment variables
             if os.getenv("ETHOS_RAPIDAPI_KEY"):
                 save_data["rapidapi_key"] = ""
             elif save_data.get("rapidapi_key"):
-                # Encrypt API key before saving
+                # Encrypt RapidAPI key before saving
                 save_data["rapidapi_key"] = self._encrypt(save_data["rapidapi_key"])
+            
+            if os.getenv("ETHOS_DNSDUMPSTER_KEY"):
+                save_data["dnsdumpster_api_key"] = ""
+            elif save_data.get("dnsdumpster_api_key"):
+                # Encrypt DNSDumpster key before saving
+                save_data["dnsdumpster_api_key"] = self._encrypt(save_data["dnsdumpster_api_key"])
 
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(save_data, f, indent=2)
 
             print(f"[+] Configuration saved to {CONFIG_FILE}")
-            if CRYPTO_AVAILABLE and save_data.get("rapidapi_key"):
-                print("[+] API key encrypted and stored securely")
+            if CRYPTO_AVAILABLE:
+                encrypted_items = []
+                if save_data.get("rapidapi_key"):
+                    encrypted_items.append("RapidAPI key")
+                if save_data.get("dnsdumpster_api_key"):
+                    encrypted_items.append("DNSDumpster key")
+                if encrypted_items:
+                    print(f"[+] {', '.join(encrypted_items)} encrypted and stored securely")
             return True
 
         except Exception as e:
@@ -156,7 +180,7 @@ class SecureConfig:
             return False
 
     def set_api_key(self, api_name: str, host: str, key: str) -> bool:
-        """Set API key and host."""
+        """Set RapidAPI key and host."""
         if not key or not host:
             print("[!] API key and host cannot be empty!")
             return False
@@ -165,9 +189,22 @@ class SecureConfig:
         self.config["rapidapi_hosts"][api_name] = host
 
         return self.save()
+    
+    def set_dnsdumpster_key(self, key: str) -> bool:
+        """Set DNSDumpster API key."""
+        if not key:
+            print("[!] API key cannot be empty!")
+            return False
+        
+        self.config["dnsdumpster_api_key"] = key
+        return self.save()
+    
+    def get_dnsdumpster_key(self) -> Optional[str]:
+        """Get DNSDumpster API key."""
+        return self.config.get("dnsdumpster_api_key", "")
 
     def remove_api_key(self, api_name: str) -> bool:
-        """Remove API configuration."""
+        """Remove RapidAPI configuration."""
         if api_name in self.config["rapidapi_hosts"]:
             del self.config["rapidapi_hosts"][api_name]
             print(f"[+] API configuration for {api_name} removed")
@@ -175,22 +212,51 @@ class SecureConfig:
         else:
             print(f"[!] No configuration found for {api_name}")
             return False
+    
+    def remove_dnsdumpster_key(self) -> bool:
+        """Remove DNSDumpster API key."""
+        if "dnsdumpster_api_key" in self.config and self.config["dnsdumpster_api_key"]:
+            self.config["dnsdumpster_api_key"] = ""
+            print(f"[+] DNSDumpster API key removed")
+            return self.save()
+        else:
+            print(f"[!] No DNSDumpster API key found")
+            return False
 
     def list_apis(self):
-        """List configured APIs."""
-        if not self.config["rapidapi_hosts"]:
-            print("[i] No APIs configured yet.")
-            return
-
-        print("\n=== Configured APIs ===")
-        for api_name, host in self.config["rapidapi_hosts"].items():
-            print(f"  - {api_name}: {host}")
-
-        has_key = bool(self.config.get("rapidapi_key") or os.getenv("ETHOS_RAPIDAPI_KEY"))
-        print(f"\nAPI Key Status: {'CONFIGURED' if has_key else 'NOT CONFIGURED'}")
+        """List all configured APIs."""
+        print("\n" + "="*60)
+        print("           CONFIGURED APIS")
+        print("="*60)
+        
+        # RapidAPI hosts
+        if self.config["rapidapi_hosts"]:
+            print("\n[RapidAPI Hosts]:")
+            for api_name, host in self.config["rapidapi_hosts"].items():
+                print(f"  • {api_name}: {host}")
+        else:
+            print("\n[RapidAPI]: No APIs configured")
+        
+        # API Key status
+        has_rapidapi_key = bool(self.config.get("rapidapi_key") or os.getenv("ETHOS_RAPIDAPI_KEY"))
+        print(f"\n[RapidAPI Key]: {'CONFIGURED ✓' if has_rapidapi_key else 'NOT CONFIGURED ✗'}")
         if os.getenv("ETHOS_RAPIDAPI_KEY"):
-            print("(Key loaded from environment variable)")
-        print()
+            print("  (Loaded from environment variable)")
+        
+        # DNSDumpster status
+        has_dnsdumpster_key = bool(self.config.get("dnsdumpster_api_key") or os.getenv("ETHOS_DNSDUMPSTER_KEY"))
+        print(f"\n[DNSDumpster Key]: {'CONFIGURED ✓' if has_dnsdumpster_key else 'NOT CONFIGURED ✗'}")
+        if os.getenv("ETHOS_DNSDUMPSTER_KEY"):
+            print("  (Loaded from environment variable)")
+        
+        # Security status
+        if CRYPTO_AVAILABLE:
+            print(f"\n[Encryption]: ENABLED ✓")
+        else:
+            print(f"\n[Encryption]: DISABLED ✗")
+            print("  Install cryptography: pip install cryptography")
+        
+        print("="*60 + "\n")
 
 # Global instance for backward compatibility
 secure_config = SecureConfig()
